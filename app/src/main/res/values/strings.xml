@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">AppBlocker</string>
+    <string name="device_admin_label">AppBlocker Protection</string>
+    <string name="device_admin_description">Blocks new app installs and protects AppBlocker from uninstall until the parent password is entered.</string>
+    <string name="device_admin_disable_warning">AppBlocker protection should be removed from inside the app after entering the parent password.</string>
+    <string name="vpn_session_name">AppBlocker Content Filter</string>
+</resources>
