@@ -1,6 +1,7 @@
 package com.appblocker.core
 
 import android.content.Context
+import android.provider.Settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.appblocker.core.admin.DeviceAdminController
@@ -30,7 +31,9 @@ class MainViewModel @Inject constructor(
     private val mutableState = MutableStateFlow(
         UiState(
             hasPassword = passwordManager.hasPassword(),
-            isAdminActive = adminController.isAdminActive()
+            isAdminActive = adminController.isAdminActive(),
+            isDeviceOwner = adminController.isDeviceOwner(),
+            isPrivateDnsActive = checkPrivateDns(context)
         )
     )
 
@@ -48,8 +51,32 @@ class MainViewModel @Inject constructor(
             repository.preloadDefaultBlocklist()
             val install = repository.getBoolean(AppRepository.INSTALL_BLOCK_ENABLED, true)
             val filter = repository.getBoolean(AppRepository.CONTENT_FILTER_ENABLED, true)
-            mutableState.value = mutableState.value.copy(installBlockEnabled = install, contentFilterEnabled = filter)
-            if (adminController.isAdminActive()) adminController.applyProtection()
+            
+            val active = adminController.isAdminActive()
+            val owner = adminController.isDeviceOwner()
+            val privateDns = checkPrivateDns(context)
+            var message: String? = null
+            if (active && !owner) {
+                message = "Not fully protected — device owner setup required."
+            } else if (active && owner) {
+                try {
+                    adminController.applyProtection()
+                } catch (e: SecurityException) {
+                    message = "Failed to apply protection: ${e.message}"
+                }
+            }
+            if (privateDns && filter) {
+                message = "Warning: Private DNS is active, bypassing content filters."
+            }
+
+            mutableState.value = mutableState.value.copy(
+                installBlockEnabled = install,
+                contentFilterEnabled = filter,
+                isAdminActive = active,
+                isDeviceOwner = owner,
+                isPrivateDnsActive = privateDns,
+                message = message
+            )
             startFilterIfEnabled()
         }
     }
@@ -68,16 +95,49 @@ class MainViewModel @Inject constructor(
     }
 
     fun refreshProtectionState() {
-        if (adminController.isAdminActive()) adminController.applyProtection()
-        mutableState.value = mutableState.value.copy(isAdminActive = adminController.isAdminActive())
+        val active = adminController.isAdminActive()
+        val owner = adminController.isDeviceOwner()
+        val privateDns = checkPrivateDns(context)
+        var message: String? = null
+        if (active && !owner) {
+            message = "Not fully protected — device owner setup required."
+        } else if (active && owner) {
+            try {
+                adminController.applyProtection()
+            } catch (e: SecurityException) {
+                message = "Failed to apply protection: ${e.message}"
+            }
+        }
+        if (privateDns && mutableState.value.contentFilterEnabled) {
+            message = "Warning: Private DNS is active, bypassing content filters."
+        }
+
+        mutableState.value = mutableState.value.copy(
+            isAdminActive = active,
+            isDeviceOwner = owner,
+            isPrivateDnsActive = privateDns,
+            message = message
+        )
     }
 
     fun setInstallBlock(enabled: Boolean, password: String? = null) {
         if (!enabled && !passwordOk(password)) return
         viewModelScope.launch {
             repository.setBoolean(AppRepository.INSTALL_BLOCK_ENABLED, enabled)
-            adminController.setInstallBlock(enabled)
-            mutableState.value = mutableState.value.copy(installBlockEnabled = enabled, message = "Install blocking ${if (enabled) "enabled" else "disabled"}.")
+            var message: String? = "Install blocking ${if (enabled) "enabled" else "disabled"}."
+            if (adminController.isDeviceOwner()) {
+                try {
+                    adminController.setInstallBlock(enabled)
+                } catch (e: SecurityException) {
+                    message = "Failed to set install block: ${e.message}"
+                }
+            } else if (adminController.isAdminActive()) {
+                message = "Cannot set install block: device owner setup required."
+            }
+            mutableState.value = mutableState.value.copy(
+                installBlockEnabled = enabled,
+                message = message
+            )
         }
     }
 
@@ -85,7 +145,16 @@ class MainViewModel @Inject constructor(
         if (!enabled && !passwordOk(password)) return
         viewModelScope.launch {
             repository.setBoolean(AppRepository.CONTENT_FILTER_ENABLED, enabled)
-            mutableState.value = mutableState.value.copy(contentFilterEnabled = enabled, message = "Content filter ${if (enabled) "enabled" else "disabled"}.")
+            val privateDns = checkPrivateDns(context)
+            var message = "Content filter ${if (enabled) "enabled" else "disabled"}."
+            if (enabled && privateDns) {
+                message = "Warning: Private DNS is active, bypassing content filters."
+            }
+            mutableState.value = mutableState.value.copy(
+                contentFilterEnabled = enabled,
+                isPrivateDnsActive = privateDns,
+                message = message
+            )
             if (enabled) ContentFilterVpnService.start(context) else ContentFilterVpnService.stop(context)
         }
     }
@@ -105,13 +174,19 @@ class MainViewModel @Inject constructor(
 
     fun removeProtection(password: String) {
         if (!passwordOk(password)) return
-        adminController.removeProtection()
+        var message: String? = "Protection removed. You can now uninstall AppBlocker from Android Settings."
+        try {
+            adminController.removeProtection()
+        } catch (e: SecurityException) {
+            message = "Failed to remove protection: ${e.message}"
+        }
         ContentFilterVpnService.stop(context)
         mutableState.value = mutableState.value.copy(
             isAdminActive = false,
+            isDeviceOwner = false,
             installBlockEnabled = false,
             contentFilterEnabled = false,
-            message = "Protection removed. You can now uninstall AppBlocker from Android Settings."
+            message = message
         )
     }
 
@@ -138,11 +213,26 @@ class MainViewModel @Inject constructor(
         mutableState.value = mutableState.value.copy(message = message)
         return result is PasswordManager.AuthResult.Success
     }
+
+    private fun checkPrivateDns(context: Context): Boolean {
+        return try {
+            val mode = Settings.Global.getString(context.contentResolver, "private_dns_mode")
+            val specifier = Settings.Global.getString(context.contentResolver, "private_dns_specifier")
+            mode == "hostname" || !specifier.isNullOrBlank()
+        } catch (e: Exception) {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+            val activeNetwork = cm?.activeNetwork
+            val lp = cm?.getLinkProperties(activeNetwork)
+            !lp?.privateDnsServerName.isNullOrBlank()
+        }
+    }
 }
 
 data class UiState(
     val hasPassword: Boolean = false,
     val isAdminActive: Boolean = false,
+    val isDeviceOwner: Boolean = false,
+    val isPrivateDnsActive: Boolean = false,
     val installBlockEnabled: Boolean = true,
     val contentFilterEnabled: Boolean = true,
     val blockedDomains: List<BlockedDomain> = emptyList(),

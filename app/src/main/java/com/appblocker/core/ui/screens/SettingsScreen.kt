@@ -143,6 +143,12 @@ fun SettingsScreen(
                 ) {
                     Column {
                         PermissionRowItem(
+                            title = "Device Owner Enrollment",
+                            isGranted = state.isDeviceOwner,
+                            icon = Icons.Default.Security,
+                            onClick = {}
+                        )
+                        PermissionRowItem(
                             title = "Device Administrator",
                             isGranted = state.isAdminActive,
                             icon = Icons.Default.Security,
@@ -166,6 +172,42 @@ fun SettingsScreen(
                             icon = Icons.Default.BatteryAlert,
                             onClick = requestBatteryExemption
                         )
+                    }
+                }
+            }
+
+            // Group 3: Device Owner Guidance (displayed if not configured)
+            if (!state.isDeviceOwner) {
+                Column {
+                    SettingsGroupHeader(title = "Device Owner Setup")
+                    Card(
+                        shape = MaterialTheme.shapes.medium,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(Dimensions.PaddingMedium)) {
+                            Text(
+                                text = "Device Owner role is required to enforce protection.",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(modifier = Modifier.height(Dimensions.PaddingSmall))
+                            Text(
+                                text = "In production: factory-reset the child's device, click the welcome screen 6 times, and scan the QR code shown during onboarding to enroll.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(Dimensions.PaddingSmall))
+                            Text(
+                                text = "Via ADB: remove all user accounts from the phone and execute:\nadb shell dpm set-device-owner com.appblocker.core/com.appblocker.core.admin.AppDeviceAdminReceiver",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }

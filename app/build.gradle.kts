@@ -56,6 +56,7 @@ dependencies {
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("com.google.dagger:hilt-android:2.56.2")
+    implementation("com.google.zxing:core:3.5.3")
     ksp("androidx.room:room-compiler:$roomVersion")
     ksp("com.google.dagger:hilt-android-compiler:2.56.2")
     debugImplementation("androidx.compose.ui:ui-tooling")

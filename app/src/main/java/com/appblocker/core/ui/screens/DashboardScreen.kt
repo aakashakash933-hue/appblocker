@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.appblocker.core.UiState
@@ -50,7 +51,7 @@ fun DashboardScreen(
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
-    val isFullyProtected = state.isAdminActive && state.installBlockEnabled && state.contentFilterEnabled
+    val isFullyProtected = state.isDeviceOwner && state.installBlockEnabled && state.contentFilterEnabled
     val isAnyProtectionEnabled = state.installBlockEnabled || state.contentFilterEnabled
 
     val shieldState = when {
@@ -66,7 +67,7 @@ fun DashboardScreen(
     }
 
     val statusSubtext = when (shieldState) {
-        ShieldState.Active -> "DNS and installation blocking are active"
+        ShieldState.Active -> "Device Owner locks and DNS content filters are active"
         ShieldState.Warning -> "Some protection components are disabled or require setup"
         ShieldState.Blocked -> "Enable VPN filter or install blocker to start protection"
     }
@@ -103,8 +104,8 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(Dimensions.PaddingLarge))
 
-        // Device Admin Warning Card
-        AnimatedVisibility(visible = !state.isAdminActive) {
+        // Device Owner Warning Card
+        AnimatedVisibility(visible = !state.isDeviceOwner) {
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.errorContainer
@@ -127,13 +128,51 @@ fun DashboardScreen(
                     Spacer(modifier = Modifier.width(Dimensions.PaddingMedium))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Admin Permission Required",
+                            text = "Device Owner Setup Required",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
                         Text(
-                            text = "Tap to activate Device Admin to secure uninstalls.",
+                            text = "AppBlocker must be set as Device Owner to prevent uninstalls and restrict apps. Tap to configure.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Private DNS Warning Card
+        AnimatedVisibility(visible = state.isPrivateDnsActive && state.contentFilterEnabled) {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = Dimensions.PaddingMedium)
+            ) {
+                Row(
+                    modifier = Modifier.padding(Dimensions.PaddingMedium),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.size(Dimensions.IconLarge)
+                    )
+                    Spacer(modifier = Modifier.width(Dimensions.PaddingMedium))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Private DNS Active",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Text(
+                            text = "Private DNS is active on this device, which bypasses content filtering. Set Private DNS to 'Off' or 'Automatic' in Android Network Settings.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
                         )
@@ -156,7 +195,7 @@ fun DashboardScreen(
         // Install Blocker Card
         ToggleCard(
             title = "Block New Installs",
-            subtitle = "Requires active Device Administrator",
+            subtitle = "Requires active Device Owner status",
             checked = state.installBlockEnabled,
             onCheckedChange = onInstallToggle
         )
@@ -207,8 +246,8 @@ fun DashboardScreen(
             )
 
             ShortcutRow(
-                title = "System Settings & Protection Removal",
-                subtitle = "Manage credentials, permissions & clean uninstalls",
+                title = "System Settings & Device Owner Guidance",
+                subtitle = "Manage credentials, QR configuration & uninstalls",
                 icon = Icons.Default.Settings,
                 onClick = onOpenSettings
             )

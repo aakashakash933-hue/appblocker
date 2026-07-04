@@ -17,30 +17,49 @@ class DeviceAdminController @Inject constructor(
 
     fun isAdminActive(): Boolean = dpm.isAdminActive(componentName)
 
+    fun isDeviceOwner(): Boolean = dpm.isDeviceOwnerApp(context.packageName)
+
     fun applyProtection() {
         if (!isAdminActive()) return
-        runCatching {
+        if (!isDeviceOwner()) {
+            throw SecurityException("App must be Device Owner to block uninstall and app installation.")
+        }
+        try {
             dpm.setUninstallBlocked(componentName, context.packageName, true)
             dpm.addUserRestriction(componentName, UserManager.DISALLOW_INSTALL_APPS)
+        } catch (e: SecurityException) {
+            android.util.Log.e("DeviceAdminController", "SecurityException in applyProtection", e)
+            throw e
         }
     }
 
     fun setInstallBlock(enabled: Boolean) {
         if (!isAdminActive()) return
-        runCatching {
+        if (!isDeviceOwner()) {
+            throw SecurityException("App must be Device Owner to block app installation.")
+        }
+        try {
             if (enabled) {
                 dpm.addUserRestriction(componentName, UserManager.DISALLOW_INSTALL_APPS)
             } else {
                 dpm.clearUserRestriction(componentName, UserManager.DISALLOW_INSTALL_APPS)
             }
+        } catch (e: SecurityException) {
+            android.util.Log.e("DeviceAdminController", "SecurityException in setInstallBlock", e)
+            throw e
         }
     }
 
     fun removeProtection() {
         if (!isAdminActive()) return
-        runCatching {
-            dpm.setUninstallBlocked(componentName, context.packageName, false)
-            dpm.clearUserRestriction(componentName, UserManager.DISALLOW_INSTALL_APPS)
+        if (isDeviceOwner()) {
+            try {
+                dpm.setUninstallBlocked(componentName, context.packageName, false)
+                dpm.clearUserRestriction(componentName, UserManager.DISALLOW_INSTALL_APPS)
+            } catch (e: SecurityException) {
+                android.util.Log.e("DeviceAdminController", "SecurityException in removeProtection", e)
+                throw e
+            }
         }
         dpm.removeActiveAdmin(componentName)
     }
